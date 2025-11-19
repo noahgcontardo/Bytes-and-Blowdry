@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bookings Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 min-h-screen flex flex-col items-center p-4">
+
+    <div class="w-full max-w-5xl bg-white rounded-2xl shadow-lg p-8">
+        <h1 class="text-3xl font-bold text-center mb-4">Bookings Dashboard</h1>
+        <p class="text-center text-gray-500 mb-6">View and manage all appointments</p>
+
+        <table class="w-full table-auto border-collapse border border-gray-300">
+            <thead>
+                <tr class="bg-cyan-600 text-white">
+                    <th class="px-4 py-2">Booking Type</th>
+                    <th class="px-4 py-2">Time</th>
+                    <th class="px-4 py-2">Confirmed</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for booking in bookings %}
+                <tr class="text-center border-b border-gray-200">
+                    <td class="px-4 py-2">{{ booking.booking_type }}</td>
+                    <td class="px-4 py-2">{{ booking.time }}</td>
+                    <td class="px-4 py-2">
+                        {% if booking.confirmed %}
+                            ✅
+                        {% else %}
+                            ❌
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %} 
+                <!-- preset data that looks good if I cannot get this set up --> 
+                <tr class="text-center border-b border-gray-200 bg-yellow-50">
+                <td class="px-4 py-2">Women's French Braid</td>
+                <td class="px-4 py-2">December 6th – 11:00 AM</td>
+                <td class="px-4 py-2">❌</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="text-center mt-6">
+            <button onclick="logout()"
+                    class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
+                Logout
+            </button>
+        </div>
+    </div>
+
+    <footer class="mt-6 text-gray-400 text-sm text-center">
+        &copy; 2025 Bytes and Blowdry. All rights reserved.
+    </footer>
+
+    <script>
+        function logout() {
+            window.location.href = "/"; // Back to login
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+# FastAPI framework
+fastapi==0.120.1
+
+# ASGI server
+uvicorn[standard]==0.38.0
+
+# Database ORM & tools
+sqlmodel==0.0.27
+SQLAlchemy==2.0.44
+
+# SQLite driver (built-in)
+pysqlite3-binary==0.5.4
+
+# Password hashing
+passlib[bcrypt]==1.7.4
+
+# Form parsing for FastAPI
+python-multipart==0.0.6
+
+# Templating & static files
+Jinja2==3.1.4
+
+# Environment variables
+python-dotenv==1.2.1
+
+# Async support (FastAPI dependency)
+anyio==4.11.0
+sniffio==1.3.1
+
+# HTTP & networking (FastAPI/uvicorn dependencies)
+httptools==0.7.1
+websockets==15.0.1
+h11==0.16.0
+
+# Authentication and OAuth support
+authlib==1.3.1           # Library for OAuth1/OAuth2 and JWT handling
+
+# OAuth client library (simple oauth client wrapper)
+oauthlib==3.2.2          # Underlying OAuth library often used with auth frameworks
+
+# Async + Sync HTTP client
+httpx==0.27.2            # Modern HTTP client supporting async/await
+
+# Optional: type hints & inspection
+typing-extensions==4.15.0
+annotated-types==0.7.0
