@@ -13,6 +13,11 @@
         
         <div id="servicesContainer" class="flex justify-center gap-3 mb-6 flex-wrap"></div>
 
+        <!-- Service Image Display -->
+        <div id="serviceImageContainer" class="flex justify-center mb-6 hidden">
+          <img id="serviceImage" src="" alt="Service Image" class="max-w-xs rounded-lg shadow-md">
+        </div>
+
         <h2 id="monthTitle" class="text-2xl font-semibold mb-4 text-center"></h2>
 
         <div id="daysContainer" class="flex justify-center gap-2 mb-6 flex-wrap"></div>
@@ -50,17 +55,20 @@
       "Women's French Braid (Adriana)": {
         name: "Women's French Braid (Adriana)",
         price: 240,
-        duration: 2
+        duration: 2,
+        image: "/static/about/image 1.jpg"
       },
       "Coloring": {
         name: "Coloring",
         price: 240,
-        duration: 2
+        duration: 2,
+        image: "/static/about/image 5.jpg"
       },
       "Straightening": {
         name: "Straightening",
         price: 240,
-        duration: 2
+        duration: 2,
+        image: "/static/about/image 4.jpg"
       }
     };
 
@@ -72,6 +80,8 @@
     };
 
     const servicesContainer = document.getElementById('servicesContainer');
+    const serviceImageContainer = document.getElementById('serviceImageContainer');
+    const serviceImage = document.getElementById('serviceImage');
     const monthTitle = document.getElementById('monthTitle');
     const daysContainer = document.getElementById('daysContainer');
     const timesContainer = document.getElementById('timesContainer');
@@ -115,6 +125,14 @@
         b.classList.add('bg-gray-100');
       });
       button.classList.add('bg-cyan-600', 'text-white');
+
+      // Show service image
+      if (service.image) {
+        serviceImage.src = service.image;
+        serviceImageContainer.classList.remove('hidden');
+      } else {
+        serviceImageContainer.classList.add('hidden');
+      }
 
       // Clear calendar and times
       daysContainer.innerHTML = '';
