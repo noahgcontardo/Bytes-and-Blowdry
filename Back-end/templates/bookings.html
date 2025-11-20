@@ -7,11 +7,15 @@
 </head>
 <body class="bg-gray-50 min-h-screen flex justify-center items-center p-4">
 
-  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-6">
+  <div class="w-full max-w-2xl bg-white rounded-2xl shadow-lg p-6">
 
-        <h2 id="monthTitle" class="text-2xl font-semibold mb-4 text-center"></h2>
+        <h2 class="text-2xl font-semibold mb-4 text-center">Select a Service</h2>
+        
+        <div id="servicesContainer" class="flex justify-center gap-3 mb-6 flex-wrap"></div>
 
-        <div id="daysContainer" class="flex justify-center gap-2 mb-6 flex-wrap"></div>
+        <h2 id="monthTitle" class="text-2xl font-semibold mb-4 text-center"></h2>
+
+        <div id="daysContainer" class="flex justify-center gap-2 mb-6 flex-wrap"></div>
 
         <div id="timesContainer" class="flex justify-center gap-2 mb-6 flex-wrap"></div>
 
@@ -23,12 +27,12 @@
       <p id="timeSummary" class="text-sm text-gray-500"></p>
     </div>
 
-        <div id="totalSection" class="flex justify-between text-gray-700 text-lg font-medium mb-6 hidden">
-      <span>Total:</span>
-      <span>$240.00 (2 hours)</span>
-    </div>
+        <div id="totalSection" class="flex justify-between text-gray-700 text-lg font-medium mb-6 hidden">
+      <span>Total:</span>
+      <span id="totalPrice">$240.00 (2 hours)</span>
+    </div>
 
-        <form id="bookingForm" method="POST" action="#" class="flex flex-col gap-4">
+        <form id="bookingForm" method="POST" action="/api/bookings" class="flex flex-col gap-4">
       <input type="hidden" id="bookingType" name="booking_type" value="Women's French Braid (Adriana)" />
       <input type="hidden" id="appointmentDatetime" name="appointment_datetime" value="" />
 
@@ -40,34 +44,88 @@
 
   </div>
 
-  <script>
-    const service = {
-      name: "Women's French Braid (Adriana)",
-      price: 240,
-      duration: 2
-    };
+  <script>
+    // Available services
+    const services = {
+      "Women's French Braid (Adriana)": {
+        name: "Women's French Braid (Adriana)",
+        price: 240,
+        duration: 2
+      },
+      "Coloring": {
+        name: "Coloring",
+        price: 240,
+        duration: 2
+      },
+      "Straightening": {
+        name: "Straightening",
+        price: 240,
+        duration: 2
+      }
+    };
 
-    const availableTimes = {
-      '2025-12-04': ['9:00 AM', '11:15 AM', '1:15 PM'],
-      '2025-12-05': ['10:00 AM', '12:30 PM'],
-      '2025-12-06': ['9:00 AM', '11:15 AM', '1:15 PM'],
-      '2025-12-07': ['8:30 AM', '2:00 PM']
-    };
+    const availableTimes = {
+      '2025-12-04': ['9:00 AM', '11:15 AM', '1:15 PM'],
+      '2025-12-05': ['10:00 AM', '12:30 PM'],
+      '2025-12-06': ['9:00 AM', '11:15 AM', '1:15 PM'],
+      '2025-12-07': ['8:30 AM', '2:00 PM']
+    };
 
-    const monthTitle = document.getElementById('monthTitle');
-    const daysContainer = document.getElementById('daysContainer');
-    const timesContainer = document.getElementById('timesContainer');
-    const timeSummary = document.getElementById('timeSummary');
-    const summary = document.getElementById('summary');
-    const totalSection = document.getElementById('totalSection');
-    const continueBtn = document.getElementById('continueBtn');
-    const bookingForm = document.getElementById('bookingForm'); // Get the form element
+    const servicesContainer = document.getElementById('servicesContainer');
+    const monthTitle = document.getElementById('monthTitle');
+    const daysContainer = document.getElementById('daysContainer');
+    const timesContainer = document.getElementById('timesContainer');
+    const timeSummary = document.getElementById('timeSummary');
+    const summary = document.getElementById('summary');
+    const totalSection = document.getElementById('totalSection');
+    const totalPrice = document.getElementById('totalPrice');
+    const continueBtn = document.getElementById('continueBtn');
+    const bookingForm = document.getElementById('bookingForm');
+    const serviceName = document.getElementById('serviceName');
+    const servicePrice = document.getElementById('servicePrice');
 
-    const appointmentInput = document.getElementById('appointmentDatetime');
-    const bookingTypeInput = document.getElementById('bookingType');
+    const appointmentInput = document.getElementById('appointmentDatetime');
+    const bookingTypeInput = document.getElementById('bookingType');
 
-    let selectedDate = null;
-    let selectedTime = null;
+    let selectedService = null;
+    let selectedDate = null;
+    let selectedTime = null;
+
+    // Render service selection buttons
+    function renderServices() {
+      servicesContainer.innerHTML = '';
+      Object.values(services).forEach(service => {
+        const btn = document.createElement('button');
+        btn.textContent = service.name;
+        btn.className = "px-4 py-2 rounded-lg bg-gray-100 hover:bg-cyan-100 transition";
+        btn.onclick = () => selectService(service, btn);
+        servicesContainer.appendChild(btn);
+      });
+    }
+
+    // Select service
+    function selectService(service, button) {
+      selectedService = service;
+      selectedDate = null;
+      selectedTime = null;
+
+      // Reset service button styles
+      [...servicesContainer.children].forEach(b => {
+        b.classList.remove('bg-cyan-600', 'text-white');
+        b.classList.add('bg-gray-100');
+      });
+      button.classList.add('bg-cyan-600', 'text-white');
+
+      // Clear calendar and times
+      daysContainer.innerHTML = '';
+      timesContainer.innerHTML = '';
+      summary.classList.add('hidden');
+      totalSection.classList.add('hidden');
+      continueBtn.disabled = true;
+
+      // Show calendar
+      renderCalendar();
+    }
 
     function renderCalendar() {
       monthTitle.textContent = "December 2025";
@@ -87,21 +145,23 @@
       });
     }
 
-    function selectDay(date, button) {
-      selectedDate = date;
-      selectedTime = null;
-      summary.classList.add('hidden');
-      totalSection.classList.add('hidden');
-      continueBtn.disabled = true;
+    function selectDay(date, button) {
+      if (!selectedService) return;
+      
+      selectedDate = date;
+      selectedTime = null;
+      summary.classList.add('hidden');
+      totalSection.classList.add('hidden');
+      continueBtn.disabled = true;
 
-      [...daysContainer.children].forEach(b => {
-        b.classList.remove('bg-cyan-600', 'text-white');
-        b.classList.add('bg-gray-100');
-      });
-      button.classList.add('bg-cyan-600', 'text-white');
+      [...daysContainer.children].forEach(b => {
+        b.classList.remove('bg-cyan-600', 'text-white');
+        b.classList.add('bg-gray-100');
+      });
+      button.classList.add('bg-cyan-600', 'text-white');
 
-      renderTimes(date);
-    }
+      renderTimes(date);
+    }
 
     function renderTimes(date) {
       timesContainer.innerHTML = '';
@@ -114,26 +174,35 @@
       });
     }
 
-    function selectTime(time, button) {
-      selectedTime = time;
+    function selectTime(time, button) {
+      if (!selectedService) return;
+      
+      selectedTime = time;
 
-      [...timesContainer.children].forEach(b => {
-        b.classList.remove('bg-cyan-600', 'text-white');
-        b.classList.add('bg-gray-100');
-      });
-      button.classList.add('bg-cyan-600', 'text-white');
+      [...timesContainer.children].forEach(b => {
+        b.classList.remove('bg-cyan-600', 'text-white');
+        b.classList.add('bg-gray-100');
+      });
+      button.classList.add('bg-cyan-600', 'text-white');
 
-      summary.classList.remove('hidden');
-      totalSection.classList.remove('hidden');
+      summary.classList.remove('hidden');
+      totalSection.classList.remove('hidden');
 
-      continueBtn.disabled = false;
+      continueBtn.disabled = false;
 
-      appointmentInput.value = `${selectedDate} ${selectedTime}`;
-      bookingTypeInput.value = service.name;
+      appointmentInput.value = `${selectedDate} ${selectedTime}`;
+      bookingTypeInput.value = selectedService.name;
 
-      const endTime = calculateEndTime(time, service.duration);
-      timeSummary.textContent = `${time} – ${endTime}`;
-    }
+      // Update service display
+      serviceName.textContent = selectedService.name;
+      servicePrice.textContent = `$${selectedService.price.toFixed(2)}`;
+      
+      const endTime = calculateEndTime(time, selectedService.duration);
+      timeSummary.textContent = `${time} – ${endTime}`;
+      
+      // Update total
+      totalPrice.textContent = `$${selectedService.price.toFixed(2)} (${selectedService.duration} hours)`;
+    }
 
     function calculateEndTime(start, hours) {
       const [t, modifier] = start.split(' ');
@@ -146,27 +215,44 @@
       return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
     }
 
-    // --- Indirect Script Handler ---
+    // --- Form Submission Handler ---
     bookingForm.addEventListener('submit', function (e) {
-        e.preventDefault(); // Stop the form from trying to submit itself
+        e.preventDefault();
         
-        // This is where you would normally send the data to a server (e.g., using fetch)
-        
-        // Save the chosen appointment to localStorage so the next page can use it
-        const bookingData = {
-            date: selectedDate,
-            time: selectedTime,
-            datetime: appointmentInput.value,
-            service: bookingTypeInput.value
-        };
-        localStorage.setItem('pendingBooking', JSON.stringify(bookingData));
+        if (!selectedService || !selectedDate || !selectedTime) {
+            alert('Please select a service, date, and time');
+            return;
+        }
 
-        // Redirect the user to the login/signup page
-        window.location.href = '/'; // Redirect to the specified page
+        // Submit to backend API
+        const formData = new FormData();
+        formData.append('booking_type', bookingTypeInput.value);
+        formData.append('appointment_datetime', appointmentInput.value);
+
+        fetch('/api/bookings', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => {
+            if (response.ok) {
+                return response;
+            }
+            throw new Error('Booking failed');
+        })
+        .then(() => {
+            alert(`Booking confirmed for ${selectedService.name} on ${selectedDate} at ${selectedTime}`);
+            // Redirect to login page after booking
+            window.location.href = '/login';
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Failed to create booking. Please try again.');
+        });
     });
     // -------------------------------
 
-    renderCalendar();
+    // Initialize
+    renderServices();
   </script>
 </body>
 </html>
