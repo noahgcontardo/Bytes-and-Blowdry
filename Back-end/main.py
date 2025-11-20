@@ -76,6 +76,7 @@ def create_db_and_tables():
     SQLModel.metadata.create_all(engine)
     print("Database tables created successfully!") 
     ensure_google_id_column()
+    ensure_booking_type_column()
 
 
 def ensure_google_id_column():
@@ -85,6 +86,17 @@ def ensure_google_id_column():
         if "google_id" not in columns:
             conn.exec_driver_sql("ALTER TABLE Clients ADD COLUMN google_id VARCHAR;")
             print("Added missing google_id column to Clients table.")
+
+
+def ensure_booking_type_column():
+    """Ensure the Bookings table has a booking_type column."""
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql("PRAGMA table_info('Bookings');")
+        columns = [row[1] for row in result]
+        if "booking_type" not in columns:
+            conn.exec_driver_sql("ALTER TABLE Bookings ADD COLUMN booking_type VARCHAR;")
+            conn.commit()
+            print("Added missing booking_type column to Bookings table.")
 
 
 def get_session():
