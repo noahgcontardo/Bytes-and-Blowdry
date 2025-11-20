@@ -1,16 +1,28 @@
+import json
 import os
+import shutil
 import sqlite3
-from datetime import datetime, date, time
-from typing import Optional
+from datetime import date, datetime, time
+from typing import List, Optional
+from uuid import uuid4
 
-from fastapi import FastAPI, Form, Depends, HTTPException, Request, status
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    Form,
+    HTTPException,
+    Request,
+    UploadFile,
+    status,
+)
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from sqlmodel import SQLModel, Field, Session, create_engine, select
-from sqlalchemy import text
 from passlib.context import CryptContext
-from pydantic import BaseModel 
+from pydantic import BaseModel
+from sqlmodel import Field, Session, SQLModel, create_engine, delete, select
 
 
 from authlib.integrations.starlette_client import OAuth
@@ -44,6 +56,15 @@ class Services(SQLModel, table=True):
     name: str
     description: Optional[str] = None
     duration_minutes: int
+    price: Optional[float] = None
+    image_path: Optional[str] = None
+
+
+class ServiceAvailability(SQLModel, table=True):
+    availability_id: Optional[int] = Field(default=None, primary_key=True)
+    service_id: int = Field(foreign_key="services.service_id")
+    available_date: date
+    slots: Optional[int] = Field(default=1)
 
 
 class Bookings(SQLModel, table=True):
@@ -62,11 +83,44 @@ class BookingCreate(BaseModel):
     appointment_datetime: str
 
 
+class ServicePayload(BaseModel):
+    name: str
+    description: Optional[str] = None
+    duration_minutes: int
+    price: Optional[float] = None
+    availability_dates: Optional[List[date]] = None
+
+
+class ServiceUpdatePayload(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    price: Optional[float] = None
+
+
+class AvailabilityPayload(BaseModel):
+    dates: List[date]
+    slots: Optional[int] = 1
+
+
+class BookingUpdatePayload(BaseModel):
+    booking_date: Optional[date] = None
+    booking_time: Optional[str] = None
+    status: Optional[str] = None
+
+
+ADMIN_WHITELIST = {"dankalbourji@gmail.com", "noahcgithub@gmail.com"}
+
+
 # ============================================================
 # DATABASE CONNECTION
 # ============================================================
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
+static_dir = os.path.join(base_dir, "static")
+service_upload_dir = os.path.join(static_dir, "uploads", "services")
+os.makedirs(service_upload_dir, exist_ok=True)
+
 db_path = os.path.join(base_dir, "hair_salon.db")
 sqlite_url = f"sqlite:///{db_path}"
 engine = create_engine(sqlite_url, echo=True, connect_args={"check_same_thread": False})
@@ -77,6 +131,29 @@ def create_db_and_tables():
     print("Database tables created successfully!") 
     ensure_google_id_column()
     ensure_booking_type_column()
+    ensure_service_price_column()
+    ensure_service_image_column()
+    ServiceAvailability.__table__.create(engine, checkfirst=True)
+
+
+def ensure_service_price_column():
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql("PRAGMA table_info('Services');")
+        columns = [row[1] for row in result]
+        if "price" not in columns:
+            conn.exec_driver_sql("ALTER TABLE Services ADD COLUMN price REAL;")
+            conn.commit()
+            print("Added missing price column to Services table.")
+
+
+def ensure_service_image_column():
+    with engine.connect() as conn:
+        result = conn.exec_driver_sql("PRAGMA table_info('Services');")
+        columns = [row[1] for row in result]
+        if "image_path" not in columns:
+            conn.exec_driver_sql("ALTER TABLE Services ADD COLUMN image_path VARCHAR;")
+            conn.commit()
+            print("Added missing image_path column to Services table.")
 
 
 def ensure_google_id_column():
@@ -102,6 +179,71 @@ def ensure_booking_type_column():
 def get_session():
     with Session(engine) as session:
         yield session
+
+
+def get_admin_user_from_session(request: Request):
+    return request.session.get("user")
+
+
+def require_admin_user(request: Request):
+    user = get_admin_user_from_session(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required.")
+    return user
+
+
+def serialize_service(session: Session, service: Services):
+    availability_stmt = select(ServiceAvailability).where(ServiceAvailability.service_id == service.service_id)
+    availability = session.exec(availability_stmt).all()
+    return {
+        "service_id": service.service_id,
+        "name": service.name,
+        "description": service.description,
+        "duration_minutes": service.duration_minutes,
+        "price": service.price,
+        "image_path": service.image_path,
+        "availability": [
+            {
+                "availability_id": slot.availability_id,
+                "date": slot.available_date.isoformat(),
+                "slots": slot.slots,
+            }
+            for slot in availability
+        ],
+    }
+
+
+def serialize_booking(booking: Bookings, client: Client, service: Services):
+    return {
+        "booking_id": booking.booking_id,
+        "booking_date": booking.booking_date.isoformat() if booking.booking_date else None,
+        "booking_time": booking.booking_time.isoformat() if booking.booking_time else None,
+        "status": booking.status,
+        "booking_type": booking.booking_type,
+        "client": {
+            "client_id": client.client_id,
+            "first_name": client.first_name,
+            "last_name": client.last_name,
+            "email": client.email,
+            "phone": client.phone,
+        },
+        "service": {
+            "service_id": service.service_id,
+            "name": service.name,
+            "duration_minutes": service.duration_minutes,
+            "price": service.price,
+        },
+    }
+
+
+def save_service_image_upload(image: UploadFile) -> str:
+    file_extension = os.path.splitext(image.filename)[1]
+    filename = f"{uuid4().hex}{file_extension}"
+    destination_path = os.path.join(service_upload_dir, filename)
+    with open(destination_path, "wb") as buffer:
+        shutil.copyfileobj(image.file, buffer)
+    relative_path = os.path.relpath(destination_path, base_dir)
+    return f"/{relative_path.replace(os.sep, '/')}"
 
 
 # ============================================================
@@ -131,8 +273,8 @@ app = FastAPI(title="Hair Salon Backend", version="1.0")
 # Session middleware for OAuth to handle stroing user data during call back
 app.add_middleware(SessionMiddleware, secret_key=config("SESSION_SECERT", default="!fallback-sercert-key!"))
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
-templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
+templates = Jinja2Templates(directory=os.path.join(base_dir, "templates"))
 
 
 @app.on_event("startup")
@@ -171,12 +313,18 @@ def get_bookings(request: Request):
 
 @app.get("/admin", response_class=HTMLResponse)
 def get_admin(request: Request):
+    user = get_admin_user_from_session(request)
+    if user and user.get("is_admin"):
+        return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
 @app.get("/dashboard", response_class=HTMLResponse)
 def get_dashboard(request: Request):
-    return templates.TemplateResponse("dashboard.html", {"request": request})
+    user = get_admin_user_from_session(request)
+    if not user or not user.get("is_admin"):
+        return RedirectResponse(url="/login", status_code=status.HTTP_302_FOUND)
+    return templates.TemplateResponse("dashboard.html", {"request": request, "user": user})
 
 
 @app.get("/about", response_class=HTMLResponse)
@@ -203,6 +351,17 @@ def login(email: str = Form(...), password: str = Form(...)):
 
 @app.get("/auth/google")
 async def login_google(request: Request):
+    """
+    OAuth login endpoint. 
+    - If called from admin page with ?admin=true, allows admin access
+    - If called from general login (no param), always redirects to bookings
+    """
+    # Check if this is an admin login attempt
+    admin_mode = request.query_params.get("admin", "false").lower() == "true"
+    
+    # Store the source in session so callback knows where to redirect
+    request.session['oauth_source'] = 'admin' if admin_mode else 'login'
+    
     redirect_uri = str(request.url_for("auth_google_callback"))
     return await oauth.google.authorize_redirect(request, redirect_uri)
 
@@ -231,13 +390,282 @@ async def auth_google_callback(request: Request, session: Session = Depends(get_
         session.refresh(client)
 
     # Store necessary info in the session
+    is_admin = user_email in ADMIN_WHITELIST
+
     request.session['user'] = {
         'client_id': client.client_id,
         'email': client.email,
-        'name': f"{client.first_name} {client.last_name}"
+        'name': f"{client.first_name} {client.last_name}",
+        'is_admin': is_admin,
     }
 
-    return RedirectResponse(url="/bookings", status_code=status.HTTP_302_FOUND)
+    # Determine redirect based on OAuth source
+    oauth_source = request.session.get('oauth_source', 'login')
+    
+    # Only allow admin access if:
+    # 1. OAuth was initiated from admin page (oauth_source == 'admin')
+    # 2. User is actually whitelisted (is_admin == True)
+    if oauth_source == 'admin' and is_admin:
+        redirect_target = "/admin"  # Will redirect to dashboard
+    else:
+        # All other cases (general login, non-admin from admin page, etc.) go to bookings
+        redirect_target = "/bookings"
+    
+    # Clear the OAuth source from session
+    if 'oauth_source' in request.session:
+        del request.session['oauth_source']
+    
+    return RedirectResponse(url=redirect_target, status_code=status.HTTP_302_FOUND)
+
+
+# ============================================================
+# ADMIN API
+# ============================================================
+
+
+@app.get("/api/admin/session")
+def admin_session(request: Request):
+    user = get_admin_user_from_session(request)
+    if not user or not user.get("is_admin"):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin session not found.")
+    return {"email": user["email"], "name": user["name"]}
+
+
+@app.post("/api/admin/logout")
+def admin_logout(request: Request):
+    request.session.clear()
+    return {"message": "Logged out successfully"}
+
+
+@app.get("/api/admin/services")
+def list_services_for_admin(
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    services = session.exec(select(Services)).all()
+    return [serialize_service(session, service) for service in services]
+
+
+@app.post("/api/admin/services")
+async def create_service_admin(
+    name: str = Form(...),
+    description: Optional[str] = Form(None),
+    duration_minutes: int = Form(...),
+    price: Optional[float] = Form(None),
+    availability_dates: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    service = Services(
+        name=name,
+        description=description,
+        duration_minutes=duration_minutes,
+        price=price,
+    )
+
+    if image:
+        service.image_path = save_service_image_upload(image)
+
+    session.add(service)
+    session.commit()
+    session.refresh(service)
+
+    if availability_dates:
+        try:
+            dates_payload = json.loads(availability_dates)
+            if not isinstance(dates_payload, list):
+                raise ValueError
+        except ValueError:
+            raise HTTPException(status_code=400, detail="availability_dates must be a JSON list of ISO dates.")
+
+        for iso_date in dates_payload:
+            try:
+                parsed_date = date.fromisoformat(iso_date)
+            except ValueError:
+                continue
+            session.add(
+                ServiceAvailability(
+                    service_id=service.service_id,
+                    available_date=parsed_date,
+                    slots=1,
+                )
+            )
+        session.commit()
+
+    return serialize_service(session, service)
+
+
+@app.patch("/api/admin/services/{service_id}")
+def update_service_admin(
+    service_id: int,
+    payload: ServiceUpdatePayload,
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    service = session.get(Services, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+
+    update_data = payload.dict(exclude_unset=True)
+    for field_name, value in update_data.items():
+        setattr(service, field_name, value)
+
+    session.add(service)
+    session.commit()
+    session.refresh(service)
+    return serialize_service(session, service)
+
+
+@app.post("/api/admin/services/{service_id}/availability")
+def set_service_availability(
+    service_id: int,
+    payload: AvailabilityPayload,
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    service = session.get(Services, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+
+    session.exec(delete(ServiceAvailability).where(ServiceAvailability.service_id == service_id))
+    session.commit()
+
+    for availability_date in payload.dates:
+        session.add(
+            ServiceAvailability(
+                service_id=service_id,
+                available_date=availability_date,
+                slots=payload.slots or 1,
+            )
+        )
+
+    session.commit()
+    session.refresh(service)
+
+    return serialize_service(session, service)
+
+
+@app.post("/api/admin/services/{service_id}/image")
+async def upload_service_image(
+    service_id: int,
+    image: UploadFile = File(...),
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    service = session.get(Services, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+
+    service.image_path = save_service_image_upload(image)
+    session.add(service)
+    session.commit()
+    session.refresh(service)
+    return serialize_service(session, service)
+
+
+@app.delete("/api/admin/services/{service_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_service(
+    service_id: int,
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    service = session.get(Services, service_id)
+    if not service:
+        raise HTTPException(status_code=404, detail="Service not found.")
+
+    session.exec(delete(ServiceAvailability).where(ServiceAvailability.service_id == service_id))
+    session.delete(service)
+    session.commit()
+    return
+
+
+@app.get("/api/admin/bookings")
+def list_bookings_for_admin(
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    statement = (
+        select(Bookings, Client, Services)
+        .join(Client, Client.client_id == Bookings.client_id)
+        .join(Services, Services.service_id == Bookings.service_id)
+    )
+    rows = session.exec(statement).all()
+    return [serialize_booking(booking, client, service) for booking, client, service in rows]
+
+
+@app.patch("/api/admin/bookings/{booking_id}")
+def update_booking_admin(
+    booking_id: int,
+    payload: BookingUpdatePayload,
+    session: Session = Depends(get_session),
+    _: dict = Depends(require_admin_user),
+):
+    booking = session.get(Bookings, booking_id)
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found.")
+
+    if payload.booking_date:
+        booking.booking_date = payload.booking_date
+
+    if payload.booking_time:
+        try:
+            parsed_time = datetime.strptime(payload.booking_time, "%H:%M").time()
+        except ValueError:
+            raise HTTPException(status_code=400, detail="booking_time must be HH:MM")
+        booking.booking_time = parsed_time
+
+    if payload.status:
+        booking.status = payload.status
+
+    session.add(booking)
+    session.commit()
+    session.refresh(booking)
+
+    service = session.get(Services, booking.service_id)
+    client = session.get(Client, booking.client_id)
+    return serialize_booking(booking, client, service)
+
+
+# ============================================================
+# PUBLIC SERVICES API (for bookings page)
+# ============================================================
+@app.get("/api/services")
+def get_services_public(session: Session = Depends(get_session)):
+    """Public endpoint to get all services with availability for the bookings page."""
+    services = session.exec(select(Services)).all()
+    
+    # Collect all availability dates from all services into one map
+    all_available_times = {}
+    
+    result = []
+    for service in services:
+        availability_stmt = select(ServiceAvailability).where(ServiceAvailability.service_id == service.service_id)
+        availability = session.exec(availability_stmt).all()
+        
+        # Merge availability dates into the global map
+        for slot in availability:
+            date_str = slot.available_date.isoformat()
+            # Default to some common time slots if not specified
+            # You can customize this logic based on your needs
+            if date_str not in all_available_times:
+                all_available_times[date_str] = ['9:00 AM', '11:15 AM', '1:15 PM', '3:00 PM']
+        
+        result.append({
+            "service_id": service.service_id,
+            "name": service.name,
+            "description": service.description,
+            "duration_minutes": service.duration_minutes,
+            "price": service.price,
+            "image_path": service.image_path,
+        })
+    
+    # Return services and a combined available_times map
+    return {
+        "services": result,
+        "available_times": all_available_times
+    }
+
 
 # ============================================================
 # BOOKINGS API

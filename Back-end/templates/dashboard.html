@@ -1,64 +1,349 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bookings Dashboard</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Salon Admin Control Center</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-50 min-h-screen flex flex-col items-center p-4">
-
-    <div class="w-full max-w-5xl bg-white rounded-2xl shadow-lg p-8">
-        <h1 class="text-3xl font-bold text-center mb-4">Bookings Dashboard</h1>
-        <p class="text-center text-gray-500 mb-6">View and manage all appointments</p>
-
-        <table class="w-full table-auto border-collapse border border-gray-300">
-            <thead>
-                <tr class="bg-cyan-600 text-white">
-                    <th class="px-4 py-2">Booking Type</th>
-                    <th class="px-4 py-2">Time</th>
-                    <th class="px-4 py-2">Confirmed</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for booking in bookings %}
-                <tr class="text-center border-b border-gray-200">
-                    <td class="px-4 py-2">{{ booking.booking_type }}</td>
-                    <td class="px-4 py-2">{{ booking.time }}</td>
-                    <td class="px-4 py-2">
-                        {% if booking.confirmed %}
-                            ✅
-                        {% else %}
-                            ❌
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %} 
-                <!-- preset data that looks good if I cannot get this set up --> 
-                <tr class="text-center border-b border-gray-200 bg-yellow-50">
-                <td class="px-4 py-2">Women's French Braid</td>
-                <td class="px-4 py-2">December 6th – 11:00 AM</td>
-                <td class="px-4 py-2">❌</td>
-                </tr>
-            </tbody>
-        </table>
-
-        <div class="text-center mt-6">
-            <button onclick="logout()"
-                    class="px-6 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600">
-                Logout
-            </button>
+<body class="bg-slate-900 min-h-screen text-slate-100">
+    <header class="border-b border-white/10 bg-slate-900/80 backdrop-blur sticky top-0 z-10">
+        <div class="mx-auto flex max-w-6xl items-center justify-between px-4 py-4">
+            <div>
+                <p class="text-sm uppercase tracking-widest text-cyan-300">Bytes & Blowdry</p>
+                <h1 class="text-2xl font-bold">Admin Mission Control</h1>
+                <p id="admin-identity" class="text-sm text-slate-400"></p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="refreshAll()" class="rounded-lg border border-cyan-400/50 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/10">
+                    Refresh Data
+                </button>
+                <button onclick="logout()" class="rounded-lg border border-red-400/50 px-4 py-2 text-sm font-semibold text-red-200 hover:bg-red-500/10">
+                    Logout
+                </button>
+            </div>
         </div>
-    </div>
+    </header>
 
-    <footer class="mt-6 text-gray-400 text-sm text-center">
-        &copy; 2025 Bytes and Blowdry. All rights reserved.
-    </footer>
+    <main class="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8">
+        <section class="grid gap-4 md:grid-cols-3">
+            <article class="rounded-2xl border border-white/10 bg-slate-800/60 p-5">
+                <p class="text-xs uppercase tracking-wide text-slate-400">Services Live</p>
+                <p id="stats-services" class="text-3xl font-semibold text-white">--</p>
+            </article>
+            <article class="rounded-2xl border border-white/10 bg-slate-800/60 p-5">
+                <p class="text-xs uppercase tracking-wide text-slate-400">Upcoming Slots</p>
+                <p id="stats-availability" class="text-3xl font-semibold text-white">--</p>
+            </article>
+            <article class="rounded-2xl border border-white/10 bg-slate-800/60 p-5">
+                <p class="text-xs uppercase tracking-wide text-slate-400">Open Bookings</p>
+                <p id="stats-bookings" class="text-3xl font-semibold text-white">--</p>
+            </article>
+        </section>
+
+        <section class="rounded-2xl border border-white/10 bg-slate-800/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold">Add a Service</h2>
+                    <p class="text-sm text-slate-400">Upload imagery, define pricing, unlock availability.</p>
+                </div>
+                <span id="service-form-status" class="text-xs font-semibold text-cyan-300"></span>
+            </div>
+            <form id="service-form" class="mt-6 grid gap-5 md:grid-cols-2">
+                <label class="flex flex-col gap-2 text-sm">
+                    <span>Name</span>
+                    <input name="name" required class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500" placeholder="Hydration Glow" />
+                </label>
+                <label class="flex flex-col gap-2 text-sm">
+                    <span>Duration (minutes)</span>
+                    <input name="duration_minutes" type="number" min="15" max="480" required class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500" placeholder="90" />
+                </label>
+                <label class="flex flex-col gap-2 text-sm md:col-span-2">
+                    <span>Description</span>
+                    <textarea name="description" rows="2" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500" placeholder="A short overview for visitors."></textarea>
+                </label>
+                <label class="flex flex-col gap-2 text-sm">
+                    <span>Price (USD)</span>
+                    <input name="price" type="number" min="0" step="0.01" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white" placeholder="120" />
+                </label>
+                <label class="flex flex-col gap-2 text-sm">
+                    <span>Availability Dates (comma separated ISO)</span>
+                    <input name="availability_dates" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500" placeholder="2025-01-12,2025-01-19" />
+                </label>
+                <label class="flex flex-col gap-2 text-sm">
+                    <span>Hero Image</span>
+                    <input name="image" type="file" accept="image/*" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white" />
+                </label>
+                <div class="md:col-span-2 flex gap-4">
+                    <button class="rounded-lg bg-cyan-500 px-6 py-2 font-medium text-white hover:bg-cyan-400" type="submit">Publish Service</button>
+                    <button type="reset" class="rounded-lg border border-white/20 px-6 py-2 font-medium text-slate-200 hover:bg-white/5">Reset Form</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="rounded-2xl border border-white/10 bg-slate-800/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold">Services Inventory</h2>
+                    <p class="text-sm text-slate-400">Update pricing, adjust availability, or remove offerings.</p>
+                </div>
+                <span id="services-status" class="text-xs font-semibold text-cyan-300"></span>
+            </div>
+            <div id="services-grid" class="mt-5 grid gap-4 lg:grid-cols-2"></div>
+        </section>
+
+        <section class="rounded-2xl border border-white/10 bg-slate-800/60 p-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-semibold">Bookings Queue</h2>
+                    <p class="text-sm text-slate-400">Confirm, reschedule, or annotate incoming appointments.</p>
+                </div>
+                <span id="bookings-status" class="text-xs font-semibold text-cyan-300"></span>
+            </div>
+            <div class="mt-5 overflow-x-auto">
+                <table class="w-full table-auto border-collapse text-sm text-slate-200">
+                    <thead class="bg-white/5 text-xs uppercase tracking-wide text-slate-400">
+                        <tr>
+                            <th class="px-3 py-2 text-left">Client</th>
+                            <th class="px-3 py-2 text-left">Service</th>
+                            <th class="px-3 py-2">Date</th>
+                            <th class="px-3 py-2">Time</th>
+                            <th class="px-3 py-2">Status</th>
+                            <th class="px-3 py-2 text-right">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="bookings-table"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
 
     <script>
-        function logout() {
-            window.location.href = "/"; // Back to login
+        const servicesGrid = document.getElementById("services-grid");
+        const bookingsTable = document.getElementById("bookings-table");
+
+        document.getElementById("service-form").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const form = event.target;
+            const formData = new FormData(form);
+
+            const availabilityRaw = formData.get("availability_dates");
+            if (availabilityRaw) {
+                const dates = availabilityRaw
+                    .split(",")
+                    .map((d) => d.trim())
+                    .filter(Boolean);
+                formData.set("availability_dates", JSON.stringify(dates));
+            }
+
+            setStatus("service-form-status", "Publishing…");
+
+            const response = await fetch("/api/admin/services", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!response.ok) {
+                setStatus("service-form-status", "Failed to publish", true);
+                alert("Unable to create service: " + (await response.text()));
+                return;
+            }
+
+            form.reset();
+            setStatus("service-form-status", "Service published");
+            refreshServices();
+        });
+
+        function setStatus(id, message, isError = false) {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.textContent = message;
+            el.classList.toggle("text-rose-300", isError);
+            el.classList.toggle("text-cyan-300", !isError);
         }
+
+        async function ensureAdminSession() {
+            const response = await fetch("/api/admin/session");
+            if (!response.ok) {
+                window.location.href = "/login";
+                return;
+            }
+            const session = await response.json();
+            document.getElementById("admin-identity").textContent = `${session.name} · ${session.email}`;
+        }
+
+        async function refreshServices() {
+            setStatus("services-status", "Loading…");
+            const response = await fetch("/api/admin/services");
+            if (!response.ok) {
+                setStatus("services-status", "Failed to load services", true);
+                return;
+            }
+            const services = await response.json();
+            renderServices(services);
+            setStatus("services-status", `Updated • ${new Date().toLocaleTimeString()}`);
+            document.getElementById("stats-services").textContent = services.length;
+
+            const availabilityTotal = services.reduce((acc, service) => acc + service.availability.length, 0);
+            document.getElementById("stats-availability").textContent = availabilityTotal;
+        }
+
+        function renderServices(services) {
+            servicesGrid.innerHTML = "";
+            if (!services.length) {
+                servicesGrid.innerHTML = '<p class="text-sm text-slate-400">No services yet.</p>';
+                return;
+            }
+
+            services.forEach((service) => {
+                const card = document.createElement("article");
+                card.className = "rounded-2xl border border-white/10 bg-slate-900/40 p-5 space-y-4";
+                card.innerHTML = `
+                    <div class="flex items-start justify-between gap-4">
+                        <div>
+                            <h3 class="text-lg font-semibold text-white">${service.name}</h3>
+                            <p class="text-sm text-slate-400">${service.description || "—"}</p>
+                        </div>
+                        <button onclick="deleteService(${service.service_id})" class="text-xs uppercase tracking-wide text-rose-300 hover:text-rose-200">Remove</button>
+                    </div>
+                    <dl class="grid grid-cols-2 gap-3 text-sm text-slate-300">
+                        <div><dt class="text-xs uppercase text-slate-500">Duration</dt><dd>${service.duration_minutes} min</dd></div>
+                        <div><dt class="text-xs uppercase text-slate-500">Price</dt><dd>$${service.price ?? "--"}</dd></div>
+                        <div class="col-span-2"><dt class="text-xs uppercase text-slate-500">Availability</dt>
+                            <dd>${service.availability.map((slot) => `<span class="mr-2 inline-block rounded-full bg-white/10 px-2 py-1 text-xs">${slot.date}</span>`).join("") || "—"}</dd>
+                        </div>
+                    </dl>
+                    <form class="mt-4 grid gap-3 text-sm" onsubmit="updateService(event, ${service.service_id})">
+                        <label class="flex flex-col gap-1">
+                            <span>Update Price</span>
+                            <input name="price" type="number" step="0.01" placeholder="${service.price ?? "0.00"}" class="rounded-lg border border-white/10 bg-black/30 px-2 py-1">
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span>Update Duration</span>
+                            <input name="duration_minutes" type="number" placeholder="${service.duration_minutes}" class="rounded-lg border border-white/10 bg-black/30 px-2 py-1">
+                        </label>
+                        <label class="flex flex-col gap-1">
+                            <span>Availability (comma separated)</span>
+                            <input name="availability" type="text" placeholder="2025-01-12,2025-01-26" class="rounded-lg border border-white/10 bg-black/30 px-2 py-1">
+                        </label>
+                        <button class="rounded-lg bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:bg-white/20" type="submit">Save Updates</button>
+                    </form>
+                `;
+                servicesGrid.appendChild(card);
+            });
+        }
+
+        async function updateService(event, serviceId) {
+            event.preventDefault();
+            const form = event.target;
+            const payload = {};
+            const price = form.price.value;
+            const duration = form.duration_minutes.value;
+
+            if (price) payload.price = parseFloat(price);
+            if (duration) payload.duration_minutes = parseInt(duration, 10);
+
+            if (Object.keys(payload).length) {
+                await fetch(`/api/admin/services/${serviceId}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(payload),
+                });
+            }
+
+            if (form.availability.value.trim()) {
+                const dates = form.availability.value
+                    .split(",")
+                    .map((d) => d.trim())
+                    .filter(Boolean);
+                await fetch(`/api/admin/services/${serviceId}/availability`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ dates }),
+                });
+            }
+
+            form.reset();
+            refreshServices();
+        }
+
+        async function deleteService(serviceId) {
+            if (!confirm("Remove this service?")) return;
+            await fetch(`/api/admin/services/${serviceId}`, { method: "DELETE" });
+            refreshServices();
+        }
+
+        async function refreshBookings() {
+            setStatus("bookings-status", "Loading…");
+            const response = await fetch("/api/admin/bookings");
+            if (!response.ok) {
+                setStatus("bookings-status", "Failed to load bookings", true);
+                return;
+            }
+            const bookings = await response.json();
+            renderBookings(bookings);
+            setStatus("bookings-status", `Updated • ${new Date().toLocaleTimeString()}`);
+            document.getElementById("stats-bookings").textContent = bookings.length;
+        }
+
+        function renderBookings(bookings) {
+            bookingsTable.innerHTML = "";
+            if (!bookings.length) {
+                bookingsTable.innerHTML = '<tr><td colspan="6" class="px-4 py-6 text-center text-slate-500">No bookings queued.</td></tr>';
+                return;
+            }
+
+            bookings.forEach((booking) => {
+                const row = document.createElement("tr");
+                row.className = "border-b border-white/5";
+                row.innerHTML = `
+                    <td class="px-3 py-2">
+                        <p class="font-medium text-white">${booking.client.first_name} ${booking.client.last_name}</p>
+                        <p class="text-xs text-slate-400">${booking.client.email ?? ""}</p>
+                    </td>
+                    <td class="px-3 py-2">${booking.service.name}</td>
+                    <td class="px-3 py-2 text-center">${booking.booking_date ?? "--"}</td>
+                    <td class="px-3 py-2 text-center">${booking.booking_time ?? "--"}</td>
+                    <td class="px-3 py-2 text-center">
+                        <select class="rounded bg-white/10 px-2 py-1 text-xs" data-booking="${booking.booking_id}" onchange="updateBookingField(${booking.booking_id}, 'status', this.value)">
+                            ${["Scheduled", "Confirmed", "Completed", "Cancelled"].map((status) => `<option value="${status}" ${booking.status === status ? "selected" : ""}>${status}</option>`).join("")}
+                        </select>
+                    </td>
+                    <td class="px-3 py-2 text-right">
+                        <div class="flex justify-end gap-2 text-xs">
+                            <input type="date" value="${booking.booking_date ?? ""}" class="rounded bg-white/10 px-2 py-1 text-xs" onchange="updateBookingField(${booking.booking_id}, 'booking_date', this.value)" />
+                            <input type="time" value="${booking.booking_time?.slice(0,5) ?? ""}" class="rounded bg-white/10 px-2 py-1 text-xs" onchange="updateBookingField(${booking.booking_id}, 'booking_time', this.value)" />
+                        </div>
+                    </td>
+                `;
+                bookingsTable.appendChild(row);
+            });
+        }
+
+        async function updateBookingField(bookingId, field, value) {
+            if (!value) return;
+            await fetch(`/api/admin/bookings/${bookingId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ [field]: value }),
+            });
+            refreshBookings();
+        }
+
+        function refreshAll() {
+            refreshServices();
+            refreshBookings();
+        }
+
+        async function logout() {
+            await fetch("/api/admin/logout", { method: "POST" });
+            window.location.href = "/admin";
+        }
+
+        (async function bootstrap() {
+            await ensureAdminSession();
+            refreshAll();
+        })();
     </script>
 </body>
 </html>

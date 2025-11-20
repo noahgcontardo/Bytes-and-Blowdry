@@ -50,34 +50,9 @@
   </div>
 
   <script>
-    // Available services
-    const services = {
-      "Women's French Braid (Adriana)": {
-        name: "Women's French Braid (Adriana)",
-        price: 240,
-        duration: 2,
-        image: "/static/about/image 1.jpg"
-      },
-      "Coloring": {
-        name: "Coloring",
-        price: 240,
-        duration: 2,
-        image: "/static/about/image 5.jpg"
-      },
-      "Straightening": {
-        name: "Straightening",
-        price: 240,
-        duration: 2,
-        image: "/static/about/image 4.jpg"
-      }
-    };
-
-    const availableTimes = {
-      '2025-12-04': ['9:00 AM', '11:15 AM', '1:15 PM'],
-      '2025-12-05': ['10:00 AM', '12:30 PM'],
-      '2025-12-06': ['9:00 AM', '11:15 AM', '1:15 PM'],
-      '2025-12-07': ['8:30 AM', '2:00 PM']
-    };
+    // Services will be loaded from API
+    let services = {};
+    let availableTimes = {};
 
     const servicesContainer = document.getElementById('servicesContainer');
     const serviceImageContainer = document.getElementById('serviceImageContainer');
@@ -141,27 +116,49 @@
       totalSection.classList.add('hidden');
       continueBtn.disabled = true;
 
-      // Show calendar
-      renderCalendar();
+      // Show calendar (will use availableTimes loaded from API)
+      if (Object.keys(availableTimes).length > 0) {
+        renderCalendar();
+      } else {
+        monthTitle.textContent = "No available dates";
+        daysContainer.innerHTML = '<p class="text-gray-500">No availability scheduled. Please check back later.</p>';
+      }
     }
 
-    function renderCalendar() {
-      monthTitle.textContent = "December 2025";
-      daysContainer.innerHTML = '';
+    function renderCalendar() {
+      if (Object.keys(availableTimes).length === 0) {
+        monthTitle.textContent = "No available dates";
+        daysContainer.innerHTML = '<p class="text-gray-500">No availability scheduled. Please check back later.</p>';
+        return;
+      }
 
-      Object.keys(availableTimes).forEach(date => {
-        const d = new Date(date);
-        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
-        const dayNum = d.getDate();
+      // Get all unique dates and sort them
+      const dates = Object.keys(availableTimes).sort();
+      if (dates.length === 0) {
+        monthTitle.textContent = "No available dates";
+        daysContainer.innerHTML = '<p class="text-gray-500">No availability scheduled.</p>';
+        return;
+      }
 
-        const btn = document.createElement('button');
-        btn.textContent = `${dayName} ${dayNum}`;
-        btn.className = "px-3 py-2 rounded-lg bg-gray-100 hover:bg-cyan-100 transition";
-        btn.onclick = () => selectDay(date, btn);
+      // Show month/year from first date
+      const firstDate = new Date(dates[0]);
+      monthTitle.textContent = firstDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+      daysContainer.innerHTML = '';
 
-        daysContainer.appendChild(btn);
-      });
-    }
+      dates.forEach(date => {
+        const d = new Date(date);
+        const dayName = d.toLocaleDateString('en-US', { weekday: 'short' });
+        const dayNum = d.getDate();
+        const month = d.toLocaleDateString('en-US', { month: 'short' });
+
+        const btn = document.createElement('button');
+        btn.textContent = `${dayName} ${month} ${dayNum}`;
+        btn.className = "px-3 py-2 rounded-lg bg-gray-100 hover:bg-cyan-100 transition";
+        btn.onclick = () => selectDay(date, btn);
+
+        daysContainer.appendChild(btn);
+      });
+    }
 
     function selectDay(date, button) {
       if (!selectedService) return;
@@ -181,16 +178,20 @@
       renderTimes(date);
     }
 
-    function renderTimes(date) {
-      timesContainer.innerHTML = '';
-      availableTimes[date].forEach(time => {
-        const btn = document.createElement('button');
-        btn.textContent = time;
-        btn.className = "px-4 py-2 rounded-lg bg-gray-100 hover:bg-cyan-100 transition";
-        btn.onclick = () => selectTime(time, btn);
-        timesContainer.appendChild(btn);
-      });
-    }
+    function renderTimes(date) {
+      timesContainer.innerHTML = '';
+      if (!availableTimes[date] || availableTimes[date].length === 0) {
+        timesContainer.innerHTML = '<p class="text-gray-500">No times available for this date.</p>';
+        return;
+      }
+      availableTimes[date].forEach(time => {
+        const btn = document.createElement('button');
+        btn.textContent = time;
+        btn.className = "px-4 py-2 rounded-lg bg-gray-100 hover:bg-cyan-100 transition";
+        btn.onclick = () => selectTime(time, btn);
+        timesContainer.appendChild(btn);
+      });
+    }
 
     function selectTime(time, button) {
       if (!selectedService) return;
@@ -269,8 +270,45 @@
     });
     // -------------------------------
 
+    // Load services from API
+    async function loadServices() {
+      try {
+        const response = await fetch('/api/services');
+        if (!response.ok) {
+          console.error('Failed to load services');
+          return;
+        }
+        const data = await response.json();
+        
+        // Convert API response to the format expected by the rest of the code
+        const servicesMap = {};
+        
+        data.services.forEach(service => {
+          servicesMap[service.name] = {
+            name: service.name,
+            price: service.price || 0,
+            duration: Math.round(service.duration_minutes / 60 * 10) / 10, // Convert minutes to hours
+            image: service.image_path || '/static/about/image 1.jpg'
+          };
+        });
+        
+        services = servicesMap;
+        availableTimes = data.available_times || {};
+        
+        // Re-render services
+        renderServices();
+        
+        // If a service was already selected, re-render calendar with new data
+        if (selectedService) {
+          renderCalendar();
+        }
+      } catch (error) {
+        console.error('Error loading services:', error);
+      }
+    }
+
     // Initialize
-    renderServices();
-  </script>
+    loadServices();
+  </script>
 </body>
 </html>
