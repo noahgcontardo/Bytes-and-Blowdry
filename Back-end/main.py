@@ -257,8 +257,10 @@ def api_get_bookings():
 
 @app.post("/api/bookings")
 def create_booking(
+    request: Request,
     booking_type: str = Form(...),
-    appointment_datetime: str = Form(...)
+    appointment_datetime: str = Form(...),
+    session: Session = Depends(get_session)
 ):
     """
     Inserts a confirmed booking into the database from form data.
@@ -284,15 +286,22 @@ def create_booking(
     cursor = conn.cursor()
 
     try:
-        # --- 1. Find or create default Client ID ---
-        client_name = "Walk-in"
-        cursor.execute("SELECT client_id FROM Clients WHERE first_name = ?", (client_name,))
-        client_row = cursor.fetchone()
-        if not client_row:
-            cursor.execute("INSERT INTO Clients (first_name, last_name) VALUES (?, ?)", (client_name, "Client"))
-            client_id = cursor.lastrowid
+        # --- 1. Find or create Client ID (use logged-in user if available) ---
+        user_session = request.session.get('user')
+        if user_session and 'client_id' in user_session:
+            client_id = user_session['client_id']
+            print(f"Using logged-in user client_id: {client_id}")
         else:
-            client_id = client_row[0]
+            # Fall back to Walk-in client
+            client_name = "Walk-in"
+            cursor.execute("SELECT client_id FROM Clients WHERE first_name = ?", (client_name,))
+            client_row = cursor.fetchone()
+            if not client_row:
+                cursor.execute("INSERT INTO Clients (first_name, last_name) VALUES (?, ?)", (client_name, "Client"))
+                client_id = cursor.lastrowid
+            else:
+                client_id = client_row[0]
+            print(f"Using Walk-in client_id: {client_id}")
 
         # --- 2. Find or create Service ID ---
         cursor.execute("SELECT service_id FROM Services WHERE name = ?", (booking_type,))
