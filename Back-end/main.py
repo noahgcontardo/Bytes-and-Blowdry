@@ -23,6 +23,7 @@ from fastapi.templating import Jinja2Templates
 from passlib.context import CryptContext
 from pydantic import BaseModel
 from sqlmodel import Field, Session, SQLModel, create_engine, delete, select
+from sqlalchemy import event
 
 
 from authlib.integrations.starlette_client import OAuth
@@ -125,8 +126,19 @@ db_path = os.path.join(base_dir, "hair_salon.db")
 sqlite_url = f"sqlite:///{db_path}"
 engine = create_engine(sqlite_url, echo=True, connect_args={"check_same_thread": False})
 
+# Enable foreign keys for SQLite on every connection
+@event.listens_for(engine, "connect")
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA foreign_keys=ON")
+    cursor.close()
+
 
 def create_db_and_tables():
+    # Enable foreign keys for SQLite
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys = ON")
+        conn.commit()
     SQLModel.metadata.create_all(engine)
     print("Database tables created successfully!") 
     ensure_google_id_column()
@@ -316,6 +328,8 @@ def get_admin(request: Request):
     user = get_admin_user_from_session(request)
     if user and user.get("is_admin"):
         return RedirectResponse(url="/dashboard", status_code=status.HTTP_302_FOUND)
+    if user and not user.get("is_admin"):
+        return RedirectResponse(url="/login?unapproved=true", status_code=status.HTTP_302_FOUND)
     return templates.TemplateResponse("admin.html", {"request": request})
 
 
