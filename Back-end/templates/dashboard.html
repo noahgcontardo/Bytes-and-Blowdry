@@ -66,9 +66,16 @@
                     <span>Price (USD)</span>
                     <input name="price" type="number" min="0" step="0.01" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white" placeholder="120" />
                 </label>
-                <label class="flex flex-col gap-2 text-sm">
-                    <span>Availability Dates (comma separated ISO)</span>
-                    <input name="availability_dates" class="rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white placeholder:text-slate-500" placeholder="2025-01-12,2025-01-19" />
+                <label class="flex flex-col gap-2 text-sm md:col-span-2">
+                    <span>Availability Dates</span>
+                    <div class="flex gap-2">
+                        <input type="date" id="new-availability-date" class="flex-1 rounded-lg border border-white/20 bg-slate-900/50 px-3 py-2 text-white" />
+                        <button type="button" onclick="addAvailabilityDate()" class="rounded-lg border border-cyan-400/50 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/20">
+                            Add Date
+                        </button>
+                    </div>
+                    <div id="availability-dates-list" class="mt-2 flex flex-wrap gap-2"></div>
+                    <input type="hidden" name="availability_dates" id="availability-dates-input" />
                 </label>
                 <label class="flex flex-col gap-2 text-sm">
                     <span>Hero Image</span>
@@ -121,19 +128,50 @@
     <script>
         const servicesGrid = document.getElementById("services-grid");
         const bookingsTable = document.getElementById("bookings-table");
+        let availabilityDates = [];
+
+        function addAvailabilityDate() {
+            const dateInput = document.getElementById("new-availability-date");
+            const date = dateInput.value;
+            if (!date) return;
+            
+            if (availabilityDates.includes(date)) {
+                alert("This date is already added.");
+                return;
+            }
+            
+            availabilityDates.push(date);
+            updateAvailabilityDatesDisplay();
+            dateInput.value = "";
+        }
+
+        function removeAvailabilityDate(date) {
+            availabilityDates = availabilityDates.filter(d => d !== date);
+            updateAvailabilityDatesDisplay();
+        }
+
+        function updateAvailabilityDatesDisplay() {
+            const listDiv = document.getElementById("availability-dates-list");
+            const input = document.getElementById("availability-dates-input");
+            
+            listDiv.innerHTML = availabilityDates.map(date => `
+                <span class="inline-flex items-center gap-1 rounded-full bg-cyan-500/20 px-3 py-1 text-xs text-cyan-200">
+                    ${date}
+                    <button type="button" onclick="removeAvailabilityDate('${date}')" class="ml-1 hover:text-rose-300">×</button>
+                </span>
+            `).join("");
+            
+            input.value = JSON.stringify(availabilityDates);
+        }
 
         document.getElementById("service-form").addEventListener("submit", async (event) => {
             event.preventDefault();
             const form = event.target;
             const formData = new FormData(form);
 
-            const availabilityRaw = formData.get("availability_dates");
-            if (availabilityRaw) {
-                const dates = availabilityRaw
-                    .split(",")
-                    .map((d) => d.trim())
-                    .filter(Boolean);
-                formData.set("availability_dates", JSON.stringify(dates));
+            const availabilityInput = document.getElementById("availability-dates-input");
+            if (availabilityInput.value) {
+                formData.set("availability_dates", availabilityInput.value);
             }
 
             setStatus("service-form-status", "Publishing…");
@@ -150,6 +188,8 @@
             }
 
             form.reset();
+            availabilityDates = [];
+            updateAvailabilityDatesDisplay();
             setStatus("service-form-status", "Service published");
             refreshServices();
         });
@@ -222,15 +262,69 @@
                             <span>Update Duration</span>
                             <input name="duration_minutes" type="number" placeholder="${service.duration_minutes}" class="rounded-lg border border-white/10 bg-black/30 px-2 py-1">
                         </label>
-                        <label class="flex flex-col gap-1">
-                            <span>Availability (comma separated)</span>
-                            <input name="availability" type="text" placeholder="2025-01-12,2025-01-26" class="rounded-lg border border-white/10 bg-black/30 px-2 py-1">
-                        </label>
+                        <div class="flex flex-col gap-1">
+                            <span class="text-xs">Availability</span>
+                            <div class="flex gap-2">
+                                <input type="date" class="service-date-input flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-xs" data-service-id="${service.service_id}" />
+                                <button type="button" onclick="addServiceAvailabilityDate(${service.service_id})" class="rounded-lg border border-white/10 bg-white/5 px-3 py-1 text-xs font-semibold hover:bg-white/10">
+                                    Add
+                                </button>
+                            </div>
+                            <div id="service-${service.service_id}-dates" class="mt-2 flex flex-wrap gap-1">${service.availability.map(slot => `
+                                <span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs">
+                                    ${slot.date}
+                                    <button type="button" onclick="removeServiceAvailabilityDate('${slot.date}', ${service.service_id})" class="ml-1 hover:text-rose-300">×</button>
+                                </span>
+                            `).join("")}</div>
+                            <input type="hidden" name="availability" class="service-availability-input" data-service-id="${service.service_id}" value='${JSON.stringify(service.availability.map(slot => slot.date))}' />
+                        </div>
                         <button class="rounded-lg bg-white/10 px-4 py-2 text-xs font-semibold uppercase tracking-wide hover:bg-white/20" type="submit">Save Updates</button>
                     </form>
                 `;
                 servicesGrid.appendChild(card);
             });
+        }
+
+        function addServiceAvailabilityDate(serviceId) {
+            const dateInput = document.querySelector(`.service-date-input[data-service-id="${serviceId}"]`);
+            const date = dateInput.value;
+            if (!date) return;
+            
+            const datesContainer = document.getElementById(`service-${serviceId}-dates`);
+            const hiddenInput = document.querySelector(`.service-availability-input[data-service-id="${serviceId}"]`);
+            const existingDates = hiddenInput.value ? JSON.parse(hiddenInput.value) : [];
+            
+            if (existingDates.includes(date)) {
+                alert("This date is already added.");
+                return;
+            }
+            
+            existingDates.push(date);
+            hiddenInput.value = JSON.stringify(existingDates);
+            
+            datesContainer.innerHTML = existingDates.map(d => `
+                <span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs">
+                    ${d}
+                    <button type="button" onclick="removeServiceAvailabilityDate('${d}', ${serviceId})" class="ml-1 hover:text-rose-300">×</button>
+                </span>
+            `).join("");
+            
+            dateInput.value = "";
+        }
+
+        function removeServiceAvailabilityDate(date, serviceId) {
+            const hiddenInput = document.querySelector(`.service-availability-input[data-service-id="${serviceId}"]`);
+            const existingDates = hiddenInput.value ? JSON.parse(hiddenInput.value) : [];
+            const updatedDates = existingDates.filter(d => d !== date);
+            hiddenInput.value = JSON.stringify(updatedDates);
+            
+            const datesContainer = document.getElementById(`service-${serviceId}-dates`);
+            datesContainer.innerHTML = updatedDates.map(d => `
+                <span class="inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-xs">
+                    ${d}
+                    <button type="button" onclick="removeServiceAvailabilityDate('${d}', ${serviceId})" class="ml-1 hover:text-rose-300">×</button>
+                </span>
+            `).join("");
         }
 
         async function updateService(event, serviceId) {
@@ -251,11 +345,9 @@
                 });
             }
 
-            if (form.availability.value.trim()) {
-                const dates = form.availability.value
-                    .split(",")
-                    .map((d) => d.trim())
-                    .filter(Boolean);
+            const hiddenInput = document.querySelector(`.service-availability-input[data-service-id="${serviceId}"]`);
+            if (hiddenInput && hiddenInput.value) {
+                const dates = JSON.parse(hiddenInput.value);
                 await fetch(`/api/admin/services/${serviceId}/availability`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
