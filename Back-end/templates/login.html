@@ -27,11 +27,17 @@
       <h2 class="text-3xl font-extrabold mb-2 text-gray-900 text-center">
         Get started
       </h2>
-      <p class="text-gray-500 mb-8 text-center">
-        Create an account or log in to manage your appointments.
-      </p>
+      <p class="text-gray-500 mb-8 text-center">
+        Create an account or log in to manage your appointments.
+      </p>
 
-            <input id="email" 
+      <div id="unapprovedMessage" class="hidden mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl">
+        <p class="text-yellow-800 text-sm text-center">
+          You are logging in as an unapproved account. Admin access requires a whitelisted account.
+        </p>
+      </div>
+
+      <input id="email"
              type="email" 
              placeholder="Email Address"
              class="w-full border border-gray-300 rounded-xl p-4 mb-5 text-lg 
@@ -104,9 +110,15 @@
     </div>
   </div>
 
-  <script>
-    // Continue button → email validation + redirect
-    document.getElementById("continueBtn").addEventListener("click", function () {
+  <script>
+    // Check for unapproved query parameter and show message
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.get('unapproved') === 'true') {
+      document.getElementById('unapprovedMessage').classList.remove('hidden');
+    }
+
+    // Continue button → email validation + redirect
+    document.getElementById("continueBtn").addEventListener("click", function () {
       const email = document.getElementById("email").value.trim();
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
